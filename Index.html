@@ -1,0 +1,517 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forest Fire Rescue</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #101d18;
+    color: #f5f7f4;
+}
+
+header {
+    background: #1b3828;
+    padding: 22px;
+    text-align: center;
+    border-bottom: 3px solid #80b86b;
+}
+
+header h1 {
+    margin: 0;
+    font-size: clamp(25px, 5vw, 38px);
+    letter-spacing: 1px;
+}
+
+header p { color: #c0d8c4; }
+
+main {
+    width: min(750px, 94%);
+    margin: 25px auto;
+}
+
+.card {
+    background: #1e3428;
+    border: 1px solid #355540;
+    border-radius: 17px;
+    padding: 24px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+button {
+    width: 100%;
+    border: 0;
+    border-radius: 10px;
+    padding: 15px;
+    margin: 7px 0;
+    font-size: 16px;
+    font-weight: bold;
+    background: #e0ebdc;
+    color: #183323;
+    cursor: pointer;
+}
+
+button:active { transform: scale(.98); }
+button:disabled { opacity: .5; }
+
+.green { background: #8cc879; }
+.yellow { background: #f1ca75; }
+.red { background: #e88c7b; }
+
+.hidden { display: none !important; }
+
+.status {
+    color: #f1d48b;
+    min-height: 22px;
+    overflow-wrap: anywhere;
+}
+
+.stats {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.stat {
+    flex: 1;
+    background: #304d39;
+    padding: 12px;
+    border-radius: 12px;
+}
+
+.stat p {
+    font-size: 22px;
+    font-weight: bold;
+    margin: 8px;
+}
+
+#question {
+    line-height: 1.4;
+    min-height: 65px;
+}
+
+.answer {
+    text-align: left;
+    background: #e4eadd;
+}
+
+.answer.correct {
+    background: #8cc879;
+}
+
+.answer.wrong {
+    background: #e88c7b;
+}
+
+#feedback {
+    min-height: 30px;
+    font-weight: bold;
+}
+
+footer {
+    text-align: center;
+    padding: 20px;
+    color: #9fb6a5;
+    font-size: 13px;
+}
+</style>
+</head>
+
+<body>
+
+<header>
+    <h1>FOREST FIRE RESCUE</h1>
+    <p>Test your knowledge. Protect our forests.</p>
+</header>
+
+<main>
+
+<section class="card" id="home">
+    <h2>Welcome, Rescuer!</h2>
+    <p>
+        Take on the emergency response challenge.
+        Answer questions and help extinguish the fires.
+    </p>
+
+    <button class="green" onclick="startGame()">
+        START MISSION
+    </button>
+
+    <button onclick="connectMicrobit()">
+        CONNECT MICRO:BIT
+    </button>
+
+    <button class="yellow" onclick="enableDemo()">
+        DEMO MODE
+    </button>
+
+    <p class="status" id="connection">
+        No micro:bit connected
+    </p>
+</section>
+
+<section class="card hidden" id="quiz">
+
+    <div class="stats">
+        <div class="stat">
+            QUESTION
+            <p id="progress">1/8</p>
+        </div>
+
+        <div class="stat">
+            SCORE
+            <p id="score">0</p>
+        </div>
+    </div>
+
+    <h2 id="question"></h2>
+
+    <div id="answers"></div>
+
+    <p id="feedback"></p>
+
+    <button class="green hidden" id="next"
+        onclick="nextQuestion()">
+        NEXT QUESTION
+    </button>
+</section>
+
+<section class="card hidden" id="results">
+    <h2>MISSION COMPLETED</h2>
+    <h1 id="finalScore"></h1>
+    <p id="resultMessage"></p>
+
+    <button class="green" onclick="restartGame()">
+        PLAY AGAIN
+    </button>
+
+    <button onclick="goHome()">HOME</button>
+</section>
+
+<section class="card">
+    <h2>MODEL CONTROLS</h2>
+    <p>Manual controls for testing the model.</p>
+
+    <button onclick="manualCommand('FIRE1')">FIRE 1</button>
+    <button onclick="manualCommand('FIRE2')">FIRE 2</button>
+    <button onclick="manualCommand('FIRE3')">FIRE 3</button>
+    <button class="yellow" onclick="manualCommand('HOSE')">
+        ROTATE HOSE
+    </button>
+    <button class="red" onclick="manualCommand('RESET')">
+        RESET MODEL
+    </button>
+</section>
+
+</main>
+
+<footer>
+    Forest Fire Rescue | Disaster Management Exhibition
+</footer>
+
+<script>
+
+// BLUETOOTH UUIDS
+
+const UART_SERVICE =
+"6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+
+const UART_RX =
+"6e400002-b5a3-f393-e0a9-e50e24dcca9e";
+
+let device = null;
+let server = null;
+let rx = null;
+let demo = false;
+
+// QUESTIONS
+
+const questions = [
+{
+q: "What should you do if you spot a forest fire?",
+a: ["Approach it", "Alert emergency services", "Ignore it", "Fight it alone"],
+correct: 1, command: "FIRE1"
+},
+{
+q: "Who studies wildfire behaviour?",
+a: ["Wildfire analyst", "Architect", "Chef", "Accountant"],
+correct: 0, command: "FIRE2"
+},
+{
+q: "Which technology helps detect fires early?",
+a: ["Satellites", "Printers", "Refrigerators", "Watches"],
+correct: 0, command: "FIRE3"
+},
+{
+q: "What is a firefighter's main responsibility?",
+a: ["Design buildings", "Respond to fires", "Manage banks", "Study planets"],
+correct: 1, command: "FIRE1"
+},
+{
+q: "What is a firebreak?",
+a: ["A barrier that slows fire spread", "A fire engine", "A satellite", "A uniform"],
+correct: 0, command: "FIRE2"
+},
+{
+q: "Who studies weather conditions?",
+a: ["Meteorologist", "Dentist", "Mechanic", "Pilot"],
+correct: 0, command: "FIRE3"
+},
+{
+q: "Which vehicle is used by forest firefighters?",
+a: ["School bus", "Fire engine", "Train", "Passenger car"],
+correct: 1, command: "FIRE1"
+},
+{
+q: "What helps prevent wildfires?",
+a: ["Leaving fires unattended", "Ignoring warnings", "Following fire safety rules", "Burning waste"],
+correct: 2, command: "FIRE2"
+}
+];
+
+// GAME VARIABLES
+
+let current = 0;
+let points = 0;
+let answered = false;
+let busy = false;
+
+// CONNECT TO MICROBIT
+
+async function connectMicrobit() {
+
+    if (!navigator.bluetooth) {
+        setStatus("Web Bluetooth is unavailable in this browser.");
+        return;
+    }
+
+    try {
+
+        device = await navigator.bluetooth.requestDevice({
+            filters: [{ services: [UART_SERVICE] }]
+        });
+
+        server = await device.gatt.connect();
+
+        const service =
+            await server.getPrimaryService(UART_SERVICE);
+
+        rx = await service.getCharacteristic(UART_RX);
+
+        demo = false;
+
+        device.addEventListener("gattserverdisconnected", () => {
+            rx = null;
+            setStatus("Micro:bit disconnected.");
+        });
+
+        setStatus("Micro:bit connected!");
+
+    } catch(error) {
+        setStatus("Connection failed: " + error.message);
+    }
+}
+
+// SEND COMMAND
+
+async function sendCommand(command) {
+
+    if (demo) {
+        console.log("DEMO:", command);
+        return true;
+    }
+
+    if (!rx) {
+        setStatus("Connect the micro:bit or enable demo mode.");
+        return false;
+    }
+
+    try {
+
+        const data = new TextEncoder().encode(command + "\n");
+
+        if (rx.properties.writeWithoutResponse) {
+            await rx.writeValueWithoutResponse(data);
+        } else {
+            await rx.writeValueWithResponse(data);
+        }
+
+        return true;
+
+    } catch(error) {
+        setStatus("Bluetooth error: " + error.message);
+        return false;
+    }
+}
+
+// STATUS
+
+function setStatus(message) {
+    document.getElementById("connection").textContent = message;
+}
+
+// DEMO MODE
+
+function enableDemo() {
+    demo = true;
+    rx = null;
+    setStatus("Demo mode active. No electronics required.");
+}
+
+// START GAME
+
+function startGame() {
+    current = 0;
+    points = 0;
+
+    document.getElementById("home").classList.add("hidden");
+    document.getElementById("results").classList.add("hidden");
+    document.getElementById("quiz").classList.remove("hidden");
+
+    displayQuestion();
+}
+
+// DISPLAY QUESTION
+
+function displayQuestion() {
+
+    answered = false;
+    busy = false;
+
+    const q = questions[current];
+
+    document.getElementById("progress").textContent =
+        (current + 1) + "/" + questions.length;
+
+    document.getElementById("score").textContent = points;
+    document.getElementById("question").textContent = q.q;
+    document.getElementById("feedback").textContent = "";
+
+    document.getElementById("next").classList.add("hidden");
+
+    const area = document.getElementById("answers");
+    area.innerHTML = "";
+
+    q.a.forEach((answer, index) => {
+
+        const button = document.createElement("button");
+
+        button.className = "answer";
+        button.textContent = answer;
+
+        button.onclick = () => checkAnswer(index, button);
+
+        area.appendChild(button);
+    });
+}
+
+// CHECK ANSWER
+
+async function checkAnswer(selected, selectedButton) {
+
+    if (answered || busy) return;
+
+    const q = questions[current];
+
+    if (selected === q.correct) {
+
+        busy = true;
+
+        const sent = await sendCommand(q.command);
+
+        if (!sent) {
+            busy = false;
+            return;
+        }
+
+        points++;
+
+        selectedButton.classList.add("correct");
+
+        document.getElementById("feedback").textContent =
+            "CORRECT! Fire mechanism activated.";
+
+    } else {
+
+        selectedButton.classList.add("wrong");
+
+        document.getElementById("feedback").textContent =
+            "Incorrect! Keep going.";
+
+    }
+
+    answered = true;
+    busy = false;
+
+    document.querySelectorAll(".answer").forEach(button => {
+        button.disabled = true;
+    });
+
+    document.getElementById("score").textContent = points;
+
+    document.getElementById("next").classList.remove("hidden");
+}
+
+// NEXT QUESTION
+
+function nextQuestion() {
+
+    current++;
+
+    if (current >= questions.length) {
+        finishGame();
+    } else {
+        displayQuestion();
+    }
+}
+
+// FINISH GAME
+
+function finishGame() {
+
+    document.getElementById("quiz").classList.add("hidden");
+    document.getElementById("results").classList.remove("hidden");
+
+    document.getElementById("finalScore").textContent =
+        points + "/" + questions.length;
+
+    document.getElementById("resultMessage").textContent =
+        points >= 6
+        ? "Excellent work, rescue expert!"
+        : "Good effort! Keep learning.";
+}
+
+// MANUAL CONTROLS
+
+async function manualCommand(command) {
+
+    const success = await sendCommand(command);
+
+    if (success) {
+        setStatus("Command sent: " + command);
+    }
+}
+
+// RESTART
+
+async function restartGame() {
+    await sendCommand("RESET");
+    goHome();
+}
+
+function goHome() {
+    document.getElementById("results").classList.add("hidden");
+    document.getElementById("quiz").classList.add("hidden");
+    document.getElementById("home").classList.remove("hidden");
+}
+
+</script>
+</body>
+</html>
